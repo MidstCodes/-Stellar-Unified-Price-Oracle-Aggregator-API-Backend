@@ -11,6 +11,7 @@ Welcome to the Stellar Unified Price Oracle Aggregator API documentation.
 - [Security Audit Plan](./SECURITY_AUDIT.md) — third-party Soroban contract audit scope and process
 - [OpenAPI spec](../api/src/services/openapi.ts) — Swagger UI at `/api/v1/docs`
 - [Threat Model](./THREAT_MODEL.md) — mainnet trust boundaries, attacker profiles, mitigations
+- [Security Architecture](./SECURITY_ARCHITECTURE.md) — controls-level deep dive: SSRF protection, encryption at rest, API auth, WebSocket signing, sanitization, secrets management
 - [Governance](./GOVERNANCE.md) — branch protection, signed commits, CODEOWNERS
 - [Contract Versioning](./CONTRACT_VERSIONING.md) — ABI compatibility policy, when to bump `API_VERSION`, release gates
 - [Canary Deployments](./CANARY_DEPLOYMENTS.md) — staging contract upgrades with traffic-split canaries, auto-rollback, and the deploy/promote/rollback runbook
