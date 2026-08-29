@@ -107,4 +107,36 @@ export const onChainHeartbeatAlertsTotal = new client.Counter({
   registers: [register],
 });
 
+// Issue #105 — canary deployments for contract upgrades.
+export const canarySubmissionsTotal = new client.Counter({
+  name: 'canary_submissions_total',
+  help: 'Price submissions routed to the canary implementation',
+  labelNames: ['status'], // 'success' | 'failed'
+  registers: [register],
+});
+
+export const canaryActive = new client.Gauge({
+  name: 'canary_active',
+  help: '1 while a canary implementation is registered with a non-zero traffic share, 0 otherwise',
+  registers: [register],
+});
+
+export const canaryTrafficShareBps = new client.Gauge({
+  name: 'canary_traffic_share_bps',
+  help: 'Traffic share currently routed to the canary implementation, in basis points',
+  registers: [register],
+});
+
+export const canaryConsecutiveFailures = new client.Gauge({
+  name: 'canary_consecutive_failures',
+  help: 'Consecutive canary submission failures observed by the rollback guard',
+  registers: [register],
+});
+
+export const canaryRollbacksTotal = new client.Counter({
+  name: 'canary_rollbacks_total',
+  help: 'Number of times the auto-rollback zeroed the canary traffic share',
+  registers: [register],
+});
+
 export { register };

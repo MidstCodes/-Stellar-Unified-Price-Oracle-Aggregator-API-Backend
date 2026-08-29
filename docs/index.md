@@ -13,6 +13,7 @@ Welcome to the Stellar Unified Price Oracle Aggregator API documentation.
 - [Threat Model](./THREAT_MODEL.md) — mainnet trust boundaries, attacker profiles, mitigations
 - [Governance](./GOVERNANCE.md) — branch protection, signed commits, CODEOWNERS
 - [Contract Versioning](./CONTRACT_VERSIONING.md) — ABI compatibility policy, when to bump `API_VERSION`, release gates
+- [Canary Deployments](./CANARY_DEPLOYMENTS.md) — staging contract upgrades with traffic-split canaries, auto-rollback, and the deploy/promote/rollback runbook
 - [Sandbox Security Review](./SANDBOX_SECURITY_REVIEW.md) — programmable feed / plugin sandbox review
 
 ## Architecture overview
