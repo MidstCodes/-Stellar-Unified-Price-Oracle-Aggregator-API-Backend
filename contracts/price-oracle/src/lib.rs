@@ -1,23 +1,31 @@
 #![no_std]
 
+// Test modules use `std` (e.g. `println!`/`vec!` in gas benchmarks); the
+// production WASM build stays `no_std`.
+#[cfg(test)]
+extern crate std;
+
 pub mod contract;
 mod errors;
 mod governance;
+mod merkle;
 mod multisig;
 mod proxy;
 pub mod storage;
 mod types;
 
 #[cfg(test)]
-mod test;
+mod compat_test;
 #[cfg(test)]
 mod fuzz;
+#[cfg(test)]
+mod gas_benchmarks;
 #[cfg(test)]
 mod governance_test;
 #[cfg(test)]
 mod proxy_test;
 #[cfg(test)]
-mod gas_benchmarks;
+mod test;
 #[cfg(test)]
 mod upgrade_migration_test;
 
@@ -25,4 +33,6 @@ pub use contract::PriceOracleContract;
 pub use governance::GovernanceContract;
 pub use multisig::MultiSigAdminContract;
 pub use proxy::ProxyContract;
-pub use types::{AssetPrice, HybridSignature, PostQuantumAdminKey, PostQuantumScheme, PriceDataPoint};
+pub use types::{
+    AssetPrice, HybridSignature, PostQuantumAdminKey, PostQuantumScheme, PriceDataPoint,
+};

@@ -17,12 +17,16 @@ mod gas_benchmarks_module_tests {
         // The gas_benchmarks module should be declared with #[cfg(test)]
         // to ensure it's only compiled during test builds.
         // This test documents the expected behavior.
-        cfg_if::cfg_if! {
-            if #[cfg(test)] {
-                assert!(true, "gas_benchmarks module should be compiled under #[cfg(test)]");
-            } else {
-                assert!(false, "gas_benchmarks module should only exist in test configuration");
-            }
+        if cfg!(test) {
+            assert!(
+                true,
+                "gas_benchmarks module should be compiled under #[cfg(test)]"
+            );
+        } else {
+            assert!(
+                false,
+                "gas_benchmarks module should only exist in test configuration"
+            );
         }
     }
 }
@@ -42,7 +46,10 @@ mod compilation_verification {
         // - The gas_benchmarks.rs file would exist but be ignored
         // - The bench_ test functions would never run
         // - Cost tracking metrics would not be available
-        assert!(true, "Module compilation successful - gas_benchmarks is included in build");
+        assert!(
+            true,
+            "Module compilation successful - gas_benchmarks is included in build"
+        );
     }
 
     #[test]

@@ -16,10 +16,7 @@
 
 #[cfg(test)]
 mod bench {
-    use soroban_sdk::{
-        testutils::{Address as _, Budget},
-        Address, Env, String,
-    };
+    use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
     use crate::contract::{PriceOracleContract, PriceOracleContractClient};
 
@@ -27,6 +24,7 @@ mod bench {
 
     fn setup() -> (Env, PriceOracleContractClient<'static>, Address, Address) {
         let env = Env::default();
+        env.mock_all_auths();
         let id = env.register_contract(None, PriceOracleContract);
         let client = PriceOracleContractClient::new(&env, &id);
 
@@ -41,10 +39,10 @@ mod bench {
 
     fn print_budget(label: &str, env: &Env) {
         let budget = env.budget();
-        println!(
+        std::println!(
             "[BENCH] {label}: cpu_instructions={}, mem_bytes={}",
-            budget.cpu_instruction_count(),
-            budget.memory_bytes_count(),
+            budget.cpu_instruction_cost(),
+            budget.memory_bytes_cost(),
         );
     }
 
@@ -220,13 +218,14 @@ mod bench {
     #[test]
     fn bench_multi_source_submit() {
         let env = Env::default();
+        env.mock_all_auths();
         let id = env.register_contract(None, PriceOracleContract);
         let client = PriceOracleContractClient::new(&env, &id);
 
         let admin = Address::generate(&env);
         client.initialize(&admin);
 
-        let sources: Vec<(Address, &str)> = vec![
+        let sources: std::vec::Vec<(Address, &str)> = std::vec![
             (Address::generate(&env), "Chainlink"),
             (Address::generate(&env), "Redstone"),
             (Address::generate(&env), "Band"),
@@ -239,7 +238,13 @@ mod bench {
 
         env.budget().reset_default();
         for (i, (src, _)) in sources.iter().enumerate() {
-            client.submit_price(src, &asset, &(100_000_000i128 + i as i128), &7u32, &(i as u64));
+            client.submit_price(
+                src,
+                &asset,
+                &(100_000_000i128 + i as i128),
+                &7u32,
+                &(i as u64),
+            );
         }
         print_budget("3-source submit_price round", &env);
     }
@@ -268,14 +273,14 @@ mod bench {
 
         env.budget().reset_default();
         client.submit_price(&oracle, &asset, &2i128, &7u32, &1u64);
-        let per_submission_cpu = env.budget().cpu_instruction_count();
-        let per_submission_mem = env.budget().memory_bytes_count();
+        let per_submission_cpu = env.budget().cpu_instruction_cost();
+        let per_submission_mem = env.budget().memory_bytes_cost();
 
         let submissions_per_month =
             DEFAULT_ASSET_COUNT * (SECONDS_PER_MONTH / SUBMISSION_CADENCE_SECS);
         let monthly_cpu_instructions = per_submission_cpu as u64 * submissions_per_month;
 
-        println!(
+        std::println!(
             "[BENCH] mainnet_cost_model: per_submission_cpu={}, per_submission_mem={}, \
              assets={}, cadence_secs={}, submissions_per_month={}, monthly_cpu_instructions={}",
             per_submission_cpu,

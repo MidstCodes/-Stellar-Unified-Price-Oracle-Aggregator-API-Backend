@@ -1,7 +1,10 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env, String, Vec};
 
 use crate::errors::OracleError;
-use crate::types::{DataKey, GovernanceConfig, GovernanceProposal, MultiSigConfig, MultiSigProposal, PriceDataPoint, SourceReputation};
+use crate::types::{
+    DataKey, GovernanceConfig, GovernanceProposal, MultiSigConfig, MultiSigProposal,
+    PriceDataPoint, SourceReputation,
+};
 
 // Maximum number of historical data points kept per asset.
 // Older entries beyond this cap are dropped on each write, keeping instance
@@ -12,6 +15,11 @@ pub const MAX_HISTORY_LEN: u32 = 100;
 
 pub fn set_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&DataKey::Admin, admin);
+}
+
+/// True once `set_admin` has been called (i.e. the contract is initialized).
+pub fn has_admin(env: &Env) -> bool {
+    env.storage().instance().has(&DataKey::Admin)
 }
 
 pub fn get_admin(env: &Env) -> Address {
@@ -49,7 +57,9 @@ pub fn is_paused(env: &Env) -> bool {
 // ── Proxy / upgrade keys ──────────────────────────────────────────────────────
 
 pub fn set_implementation(env: &Env, implementation: &Address) {
-    env.storage().instance().set(&DataKey::Implementation, implementation);
+    env.storage()
+        .instance()
+        .set(&DataKey::Implementation, implementation);
 }
 
 pub fn get_implementation(env: &Env) -> Option<Address> {
@@ -57,28 +67,42 @@ pub fn get_implementation(env: &Env) -> Option<Address> {
 }
 
 pub fn set_previous_implementation(env: &Env, implementation: &Address) {
-    env.storage().instance().set(&DataKey::PreviousImplementation, implementation);
+    env.storage()
+        .instance()
+        .set(&DataKey::PreviousImplementation, implementation);
 }
 
 pub fn get_previous_implementation(env: &Env) -> Option<Address> {
-    env.storage().instance().get(&DataKey::PreviousImplementation)
+    env.storage()
+        .instance()
+        .get(&DataKey::PreviousImplementation)
 }
 
 pub fn set_contract_version(env: &Env, version: u32) {
-    env.storage().instance().set(&DataKey::ContractVersion, &version);
+    env.storage()
+        .instance()
+        .set(&DataKey::ContractVersion, &version);
 }
 
 pub fn get_contract_version(env: &Env) -> u32 {
-    env.storage().instance().get(&DataKey::ContractVersion).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&DataKey::ContractVersion)
+        .unwrap_or(0)
 }
 
 // Issue #68 — storage layout version for migration safety
 pub fn set_storage_layout_version(env: &Env, version: u32) {
-    env.storage().instance().set(&DataKey::StorageLayoutVersion, &version);
+    env.storage()
+        .instance()
+        .set(&DataKey::StorageLayoutVersion, &version);
 }
 
 pub fn get_storage_layout_version(env: &Env) -> u32 {
-    env.storage().instance().get(&DataKey::StorageLayoutVersion).unwrap_or(1)
+    env.storage()
+        .instance()
+        .get(&DataKey::StorageLayoutVersion)
+        .unwrap_or(1)
 }
 
 pub fn is_authorized_source(env: &Env, source: &Address) -> bool {
@@ -212,7 +236,10 @@ pub fn get_deviation_threshold(env: &Env) -> Option<u32> {
 }
 
 pub fn get_batch_nonce(env: &Env) -> u64 {
-    env.storage().instance().get(&DataKey::BatchNonce).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&DataKey::BatchNonce)
+        .unwrap_or(0)
 }
 
 pub fn increment_batch_nonce(env: &Env) -> u64 {
@@ -236,7 +263,10 @@ pub fn set_query_fee(env: &Env, fee: &i128) {
 }
 
 pub fn get_query_fee(env: &Env) -> i128 {
-    env.storage().instance().get(&DataKey::QueryFee).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&DataKey::QueryFee)
+        .unwrap_or(0)
 }
 
 pub fn set_whitelist(env: &Env, addr: &Address, status: bool) {
@@ -246,7 +276,10 @@ pub fn set_whitelist(env: &Env, addr: &Address, status: bool) {
 }
 
 pub fn get_fee_balance(env: &Env) -> i128 {
-    env.storage().instance().get(&DataKey::FeeBalance).unwrap_or(0)
+    env.storage()
+        .instance()
+        .get(&DataKey::FeeBalance)
+        .unwrap_or(0)
 }
 
 pub fn set_fee_balance(env: &Env, balance: &i128) {
@@ -275,7 +308,9 @@ pub fn remove_source_reputation(env: &Env, source: &Address) {
 // ── Multi-sig ─────────────────────────────────────────────────────────────────
 
 pub fn set_multisig_config(env: &Env, config: &MultiSigConfig) {
-    env.storage().instance().set(&DataKey::MultiSigConfig, config);
+    env.storage()
+        .instance()
+        .set(&DataKey::MultiSigConfig, config);
 }
 
 pub fn get_multisig_config(env: &Env) -> Option<MultiSigConfig> {
@@ -290,7 +325,9 @@ pub fn get_msig_proposal_count(env: &Env) -> u32 {
 }
 
 pub fn set_msig_proposal_count(env: &Env, count: u32) {
-    env.storage().instance().set(&DataKey::MultiSigProposalCount, &count);
+    env.storage()
+        .instance()
+        .set(&DataKey::MultiSigProposalCount, &count);
 }
 
 pub fn set_msig_proposal(env: &Env, proposal: &MultiSigProposal) {
@@ -306,7 +343,9 @@ pub fn get_msig_proposal(env: &Env, id: u32) -> Option<MultiSigProposal> {
 // ── Governance (token-based voting) ──────────────────────────────────────────
 
 pub fn set_gov_config(env: &Env, config: &GovernanceConfig) {
-    env.storage().instance().set(&DataKey::GovernanceConfig, config);
+    env.storage()
+        .instance()
+        .set(&DataKey::GovernanceConfig, config);
 }
 
 pub fn get_gov_config(env: &Env) -> Option<GovernanceConfig> {
@@ -314,7 +353,8 @@ pub fn get_gov_config(env: &Env) -> Option<GovernanceConfig> {
 }
 
 pub fn increment_proposal_count(env: &Env) -> u32 {
-    let count = env.storage()
+    let count = env
+        .storage()
         .instance()
         .get(&DataKey::GovernanceProposalCount)
         .unwrap_or(0);
@@ -330,6 +370,12 @@ pub fn get_proposal_count(env: &Env) -> u32 {
         .instance()
         .get(&DataKey::GovernanceProposalCount)
         .unwrap_or(0)
+}
+
+pub fn set_proposal_count(env: &Env, count: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::GovernanceProposalCount, &count);
 }
 
 pub fn set_gov_proposal(env: &Env, proposal: &GovernanceProposal) {
@@ -348,30 +394,10 @@ pub fn get_multisig_proposal(env: &Env, id: u32) -> Option<MultiSigProposal> {
     env.storage().instance().get(&DataKey::MultiSigProposal(id))
 }
 
-// ── Governance ────────────────────────────────────────────────────────────────
-
-pub fn get_gov_config(env: &Env) -> Option<GovernanceConfig> {
-    env.storage().instance().get(&DataKey::GovernanceConfig)
-}
-
-pub fn set_gov_config(env: &Env, config: &GovernanceConfig) {
-    env.storage().instance().set(&DataKey::GovernanceConfig, config);
-}
-
-pub fn increment_proposal_count(env: &Env) -> u32 {
-    let count = get_proposal_count(env);
-    set_proposal_count(env, count + 1);
-    count + 1
-}
-
-pub fn set_gov_proposal(env: &Env, proposal: &GovernanceProposal) {
+pub fn get_gov_proposal(env: &Env, id: u32) -> Option<GovernanceProposal> {
     env.storage()
         .instance()
-        .set(&DataKey::GovernanceProposal(proposal.id), proposal);
-}
-
-pub fn get_gov_proposal(env: &Env, id: u32) -> Option<GovernanceProposal> {
-    env.storage().instance().get(&DataKey::GovernanceProposal(id))
+        .get(&DataKey::GovernanceProposal(id))
 }
 
 pub fn record_vote(env: &Env, proposal_id: u32, voter: &Address, support: bool) {
@@ -414,7 +440,9 @@ pub fn set_pending_upgrade(env: &Env, wasm_hash: &BytesN<32>, eta: u64) {
     env.storage()
         .instance()
         .set(&DataKey::PendingUpgradeHash, wasm_hash);
-    env.storage().instance().set(&DataKey::PendingUpgradeEta, &eta);
+    env.storage()
+        .instance()
+        .set(&DataKey::PendingUpgradeEta, &eta);
     env.storage()
         .instance()
         .set(&DataKey::UpgradeApprovals, &Vec::<Address>::new(env));
@@ -429,7 +457,9 @@ pub fn get_pending_upgrade_eta(env: &Env) -> Option<u64> {
 }
 
 pub fn clear_pending_upgrade(env: &Env) {
-    env.storage().instance().remove(&DataKey::PendingUpgradeHash);
+    env.storage()
+        .instance()
+        .remove(&DataKey::PendingUpgradeHash);
     env.storage().instance().remove(&DataKey::PendingUpgradeEta);
     env.storage().instance().remove(&DataKey::UpgradeApprovals);
 }
@@ -474,7 +504,9 @@ pub fn get_canary(env: &Env) -> Option<(Address, u32)> {
 }
 
 pub fn clear_canary(env: &Env) {
-    env.storage().instance().remove(&DataKey::CanaryImplementation);
+    env.storage()
+        .instance()
+        .remove(&DataKey::CanaryImplementation);
     env.storage()
         .instance()
         .remove(&DataKey::CanaryTrafficShareBps);

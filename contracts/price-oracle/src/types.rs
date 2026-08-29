@@ -79,10 +79,10 @@ pub struct MerkleProof {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SourceReputation {
-    pub score: u32,                 // 0-10000 basis points; 10000 = perfect accuracy
+    pub score: u32, // 0-10000 basis points; 10000 = perfect accuracy
     pub total_submissions: u32,
     pub accurate_submissions: u32,
-    pub last_updated: u64,          // ledger timestamp of last submission
+    pub last_updated: u64, // ledger timestamp of last submission
 }
 
 // Issue #67 — multi-sig admin control
@@ -96,12 +96,12 @@ pub struct MultiSigConfig {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub enum ProposalAction {
-    AddSource(Address, String),     // (source_address, name)
+    AddSource(Address, String), // (source_address, name)
     RemoveSource(Address),
-    SetTrustedAsset(String, bool),  // (asset, trusted)
+    SetTrustedAsset(String, bool), // (asset, trusted)
     TransferAdmin(Address),
-    SetDeviationThreshold(u32),     // new threshold in basis points
-    ResetReputation(Address),       // source address
+    SetDeviationThreshold(u32), // new threshold in basis points
+    ResetReputation(Address),   // source address
     AddSigner(Address),
     RemoveSigner(Address),
     SetThreshold(u32),
@@ -162,62 +162,16 @@ pub struct MultiSigProposal {
     pub id: u32,
     pub action: ProposalAction,
     pub approvals: Vec<Address>,
-    pub executed: u32,              // 0 = pending, 1 = executed (bool avoided for XDR compat)
+    pub executed: u32, // 0 = pending, 1 = executed (bool avoided for XDR compat)
     pub created_at: u64,
     pub proposer: Address,
-}
-
-/// Governance proposal (token-based voting).  Distinct from MultiSigProposal
-/// because the lifecycle includes voting stages, timelock, descriptions, etc.
-#[contracttype]
-#[derive(Clone, Debug)]
-pub struct GovernanceProposal {
-    pub id: u32,
-    pub proposer: Address,
-    pub action: ProposalAction,
-    pub description: String,
-    pub votes_for: i128,
-    pub votes_against: i128,
-    pub voting_start: u64,
-    pub voting_end: u64,
-    pub execution_time: u64,
-    pub status: ProposalStatus,
-}
-
-/// Lifecycle status of a governance proposal.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProposalStatus {
-    Active,
-    Queued,
-    Ready,
-    Executed,
-    Defeated,
-    Cancelled,
-}
-
-/// On-chain governance configuration — voting parameters and token-gating.
-#[contracttype]
-#[derive(Clone, Debug)]
-pub struct GovernanceConfig {
-    /// SEP-41 token whose balance determines voting power.
-    pub token: Address,
-    /// Minimum voting period in ledger seconds.
-    pub voting_period: u64,
-    /// Minimum delay between passage and execution (timelock).
-    pub timelock_delay: u64,
-    /// Minimum total votes (for + against) needed for a proposal to pass.
-    pub quorum: i128,
-    /// Minimum token balance required to create a proposal.
-    pub proposal_threshold: i128,
-    /// Guardian address empowered to bypass timelock in emergencies.
-    pub guardian: Address,
 }
 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     Admin,
+    Paused,
     Source(Address),
     SourceName(Address),
     LatestPrice(String),
@@ -246,6 +200,7 @@ pub enum DataKey {
     // Issue #67 — multi-sig
     MultiSigConfig,
     ProposalCount,
+    MultiSigProposalCount,
     MultiSigProposal(u32),
     // Governance
     GovernanceConfig,

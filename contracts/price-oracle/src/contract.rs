@@ -3,21 +3,36 @@ use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, String, Vec};
 use crate::errors::OracleError;
 use crate::merkle;
 use crate::storage;
-use crate::types::{AssetPrice, BatchPriceEntry, MerkleProof, MultiSigConfig, MultiSigProposal, ProposalAction, PriceDataPoint, SourceReputation};
+use crate::types::{
+    AssetPrice, BatchPriceEntry, MerkleProof, MultiSigConfig, MultiSigProposal, PriceDataPoint,
+    ProposalAction, SourceReputation,
+};
 
 // Basis points threshold below which a submission is counted as accurate for reputation.
 const REPUTATION_ACCURACY_THRESHOLD_BPS: u128 = 2000; // 20%
+
 // Seconds between reputation decay applications (~7 days).
 const REPUTATION_DECAY_PERIOD_SECS: u64 = 604_800;
 // Decay factor per period: score = score * 95 / 100.
 const REPUTATION_DECAY_NUMERATOR: u32 = 95;
 const REPUTATION_DECAY_DENOMINATOR: u32 = 100;
 
+// Issue #383 — ABI version of the exported interface.  Bump only for a
+// breaking change to any exported entrypoint's shape (see
+// docs/CONTRACT_VERSIONING.md); every upgrade keeps this value stable.
+pub const API_VERSION: u32 = 1;
+
 #[contract]
 pub struct PriceOracleContract;
 
 #[contractimpl]
 impl PriceOracleContract {
+    /// Version of the exported ABI.  Stable across non-breaking upgrades;
+    /// consumers can gate integrations on it.  Also exposed by the proxy.
+    pub fn get_api_version(_env: Env) -> u32 {
+        API_VERSION
+    }
+
     pub fn initialize(env: Env, admin: Address) -> Result<(), OracleError> {
         if storage::has_admin(&env) {
             return Err(OracleError::AlreadyInitialized);
@@ -144,8 +159,8 @@ impl PriceOracleContract {
         entry: BatchPriceEntry,
         proof: MerkleProof,
     ) -> Result<PriceDataPoint, OracleError> {
-        let root = storage::get_batch_root(&env, batch_nonce)
-            .ok_or(OracleError::BatchRootNotFound)?;
+        let root =
+            storage::get_batch_root(&env, batch_nonce).ok_or(OracleError::BatchRootNotFound)?;
 
         if entry.price < 0 {
             return Err(OracleError::InvalidPrice);
@@ -202,11 +217,7 @@ impl PriceOracleContract {
         Some(apply_reputation_decay(&env, rep))
     }
 
-    pub fn reset_reputation(
-        env: Env,
-        admin: Address,
-        source: Address,
-    ) -> Result<(), OracleError> {
+    pub fn reset_reputation(env: Env, admin: Address, source: Address) -> Result<(), OracleError> {
         admin.require_auth();
         storage::verify_admin(&env, &admin)?;
         storage::remove_source_reputation(&env, &source);
@@ -242,8 +253,8 @@ impl PriceOracleContract {
     ) -> Result<u32, OracleError> {
         proposer.require_auth();
 
-        let config = storage::get_multisig_config(&env)
-            .ok_or(OracleError::MultiSigNotInitialized)?;
+        let config =
+            storage::get_multisig_config(&env).ok_or(OracleError::MultiSigNotInitialized)?;
 
         if !vec_contains_address(&config.signers, &proposer) {
             return Err(OracleError::NotASigner);
@@ -275,8 +286,8 @@ impl PriceOracleContract {
     ) -> Result<(), OracleError> {
         signer.require_auth();
 
-        let config = storage::get_multisig_config(&env)
-            .ok_or(OracleError::MultiSigNotInitialized)?;
+        let config =
+            storage::get_multisig_config(&env).ok_or(OracleError::MultiSigNotInitialized)?;
 
         if !vec_contains_address(&config.signers, &signer) {
             return Err(OracleError::NotASigner);
@@ -305,8 +316,8 @@ impl PriceOracleContract {
     ) -> Result<(), OracleError> {
         signer.require_auth();
 
-        let config = storage::get_multisig_config(&env)
-            .ok_or(OracleError::MultiSigNotInitialized)?;
+        let config =
+            storage::get_multisig_config(&env).ok_or(OracleError::MultiSigNotInitialized)?;
 
         if !vec_contains_address(&config.signers, &signer) {
             return Err(OracleError::NotASigner);
@@ -481,7 +492,8 @@ impl PriceOracleContract {
         storage::set_stake(&env, &source, &(current - slashed));
         let count = storage::get_slash_count(&env, &source);
         storage::set_slash_count(&env, &source, &(count + 1));
-        env.events().publish(("source_slashed", source, reason), slashed);
+        env.events()
+            .publish(("source_slashed", source, reason), slashed);
     }
 
     pub fn get_stake_balance(env: Env, source: Address) -> i128 {
@@ -545,7 +557,11 @@ fn deviation_exceeds(new_price: i128, prev_price: i128, threshold_bps: u32) -> b
 
     let diff: u128 = if (new_price >= 0) == (prev_price >= 0) {
         let new_abs = new_price.unsigned_abs();
-        if new_abs >= prev_abs { new_abs - prev_abs } else { prev_abs - new_abs }
+        if new_abs >= prev_abs {
+            new_abs - prev_abs
+        } else {
+            prev_abs - new_abs
+        }
     } else {
         new_price.unsigned_abs().saturating_add(prev_abs)
     };
@@ -560,7 +576,11 @@ fn deviation_exceeds(new_price: i128, prev_price: i128, threshold_bps: u32) -> b
 fn update_reputation(env: &Env, source: &Address, new_price: i128, asset: &String, timestamp: u64) {
     let is_accurate = match storage::get_latest_price(env, asset) {
         None => true,
-        Some(prev) => !deviation_exceeds(new_price, prev.price, REPUTATION_ACCURACY_THRESHOLD_BPS as u32),
+        Some(prev) => !deviation_exceeds(
+            new_price,
+            prev.price,
+            REPUTATION_ACCURACY_THRESHOLD_BPS as u32,
+        ),
     };
 
     let mut rep = storage::get_source_reputation(env, source).unwrap_or(SourceReputation {
@@ -577,9 +597,7 @@ fn update_reputation(env: &Env, source: &Address, new_price: i128, asset: &Strin
     rep.score = if rep.total_submissions == 0 {
         10_000
     } else {
-        (rep.accurate_submissions as u32)
-            .saturating_mul(10_000)
-            / rep.total_submissions
+        (rep.accurate_submissions as u32).saturating_mul(10_000) / rep.total_submissions
     };
     rep.last_updated = timestamp;
 
@@ -594,10 +612,8 @@ fn apply_reputation_decay(env: &Env, mut rep: SourceReputation) -> SourceReputat
     }
     let periods = (elapsed / REPUTATION_DECAY_PERIOD_SECS).min(40) as u32;
     for _ in 0..periods {
-        rep.score = rep
-            .score
-            .saturating_mul(REPUTATION_DECAY_NUMERATOR)
-            / REPUTATION_DECAY_DENOMINATOR;
+        rep.score =
+            rep.score.saturating_mul(REPUTATION_DECAY_NUMERATOR) / REPUTATION_DECAY_DENOMINATOR;
     }
     rep
 }
@@ -687,8 +703,8 @@ fn calculate_usd_price(env: &Env, asset: &String, price: i128, decimals: u32) ->
             return Some(10i128.pow(decimals));
         }
         if let Some(xlm_price) = storage::get_latest_price(env, &xlm) {
-            let base_asset_price = (price * xlm_price.price)
-                .checked_div(10i128.pow(xlm_price.decimals))?;
+            let base_asset_price =
+                (price * xlm_price.price).checked_div(10i128.pow(xlm_price.decimals))?;
             return Some(base_asset_price);
         }
     }
@@ -696,8 +712,6 @@ fn calculate_usd_price(env: &Env, asset: &String, price: i128, decimals: u32) ->
     // (price_in_xlm * xlm_usd_price) / 10^xlm_price.decimals -- uses
     // xlm_price's own decimals, not usdc_anchor's, since
     // xlm_price.price is scaled by xlm_price.decimals.
-    let usd_value = (price * xlm_price.price)
-        .checked_div(10i128.pow(xlm_price.decimals))?;
-        .checked_div(10i128.pow(usdc_anchor.decimals))?;
+    let usd_value = (price * xlm_price.price).checked_div(10i128.pow(xlm_price.decimals))?;
     Some(usd_value)
 }

@@ -1,11 +1,12 @@
-use soroban_sdk::{Address, Env, String};
 use soroban_sdk::testutils::Address as TestAddress;
+use soroban_sdk::{Address, Env, String};
 
 use crate::contract::PriceOracleContract;
 use crate::contract::PriceOracleContractClient;
 
 fn setup_fuzz() -> (Env, PriceOracleContractClient<'static>, Address, Address) {
     let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register_contract(None, PriceOracleContract);
     let client = PriceOracleContractClient::new(&env, &contract_id);
 
@@ -59,13 +60,8 @@ fn fuzz_submit_price_zero() {
     let (env, client, _admin, oracle) = setup_fuzz();
     let asset = String::from_str(&env, "ETH");
 
-    let result = client.try_submit_price(
-        &oracle,
-        &asset,
-        &0i128,
-        &18u32,
-        &env.ledger().timestamp(),
-    );
+    let result =
+        client.try_submit_price(&oracle, &asset, &0i128, &18u32, &env.ledger().timestamp());
 
     assert!(result.is_ok());
     let price = client.get_price(&asset).expect("price should exist");
@@ -110,11 +106,7 @@ fn fuzz_submit_price_large_decimals() {
 fn fuzz_add_oracle_source_duplicate_address() {
     let (env, client, admin, oracle) = setup_fuzz();
 
-    let result = client.try_add_oracle_source(
-        &admin,
-        &oracle,
-        &String::from_str(&env, "Redstone"),
-    );
+    let result = client.try_add_oracle_source(&admin, &oracle, &String::from_str(&env, "Redstone"));
 
     assert!(result.is_ok());
 
@@ -225,12 +217,50 @@ fn fuzz_sequential_price_submissions_consistency() {
     let (env, client, _admin, oracle) = setup_fuzz();
     let asset = String::from_str(&env, "XLM");
 
-    client.submit_price(&oracle, &asset, &100_000i128, &7u32, &(env.ledger().timestamp()));
-    client.submit_price(&oracle, &asset, &1_000_000i128, &7u32, &(env.ledger().timestamp() + 1));
-    client.submit_price(&oracle, &asset, &10_000_000i128, &7u32, &(env.ledger().timestamp() + 2));
-    client.submit_price(&oracle, &asset, &(i128::MAX / 2), &7u32, &(env.ledger().timestamp() + 3));
-    client.submit_price(&oracle, &asset, &-1_000_000i128, &7u32, &(env.ledger().timestamp() + 4));
-    client.submit_price(&oracle, &asset, &0i128, &7u32, &(env.ledger().timestamp() + 5));
+    client.submit_price(
+        &oracle,
+        &asset,
+        &100_000i128,
+        &7u32,
+        &(env.ledger().timestamp()),
+    );
+    client.submit_price(
+        &oracle,
+        &asset,
+        &1_000_000i128,
+        &7u32,
+        &(env.ledger().timestamp() + 1),
+    );
+    client.submit_price(
+        &oracle,
+        &asset,
+        &10_000_000i128,
+        &7u32,
+        &(env.ledger().timestamp() + 2),
+    );
+    client.submit_price(
+        &oracle,
+        &asset,
+        &(i128::MAX / 2),
+        &7u32,
+        &(env.ledger().timestamp() + 3),
+    );
+    // submit_price rejects negative prices (InvalidPrice); a positive value
+    // keeps the history-consistency intent of the test.
+    client.submit_price(
+        &oracle,
+        &asset,
+        &500_000i128,
+        &7u32,
+        &(env.ledger().timestamp() + 4),
+    );
+    client.submit_price(
+        &oracle,
+        &asset,
+        &0i128,
+        &7u32,
+        &(env.ledger().timestamp() + 5),
+    );
 
     let history = client.get_price_history(&asset, &u32::MAX);
     assert_eq!(history.len(), 6);
@@ -242,6 +272,7 @@ fn fuzz_sequential_price_submissions_consistency() {
 #[test]
 fn fuzz_multiple_sources_concurrent_submissions() {
     let env = Env::default();
+    env.mock_all_auths();
     let contract_id = env.register_contract(None, PriceOracleContract);
     let client = PriceOracleContractClient::new(&env, &contract_id);
 
