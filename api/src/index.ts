@@ -10,7 +10,7 @@ import { logger } from './observability/logger';
 import { requestLogger } from './observability/request-logger';
 import { requestIdMiddleware } from './observability/request-id';
 import { errorHandler, notFoundHandler } from './infrastructure/error';
-import { metricsMiddleware, metricsHandler } from './observability/metrics';
+import { metricsMiddleware, metricsHandler, serviceStartupDurationMs } from './observability/metrics';
 import { authMiddleware, optionalAuthMiddleware } from './governance/auth';
 import { sanitizeInputs } from './governance/sanitization';
 import { httpsRedirect, hstsHeaders } from './infrastructure/https';
@@ -38,20 +38,26 @@ import sandboxRoutes, { initializeSandboxCache } from './routes/sandbox';
 import featureFlagRoutes from './routes/featureFlags';
 import eventRoutes from './routes/events';
 import governanceRoutes from './governance/proposal-routes';
+import { RegulatoryReportScheduler } from './governance/regulatory-reporting';
 import { uptimeTracker } from './observability/uptime-tracker';
 import { getVaultClient } from '@stellar-oracle/vault-client';
 import { apiKeyManager } from './governance/api-key-manager';
+import webhooksRoutes from './webhooks/webhooks';
+import graphqlRoutes from './graphql';
+import releaseNotesRoutes from './release-notes/router';
 
 // Initialize distributed tracing
 initializeTracing(config.tracing);
 
 const app = express();
 
+const startupStartedAt = Date.now();
 let db: DatabaseClient | null = null;
 let archival: ArchivalService | null = null;
 let dbHealthMonitor: DbHealthMonitor | null = null;
 let consistencyChecker: DataConsistencyChecker | null = null;
 let backupService: BackupService | null = null;
+let regulatoryReportScheduler: RegulatoryReportScheduler | null = null;
 
 async function initializeApp(): Promise<void> {
   // Initialize Vault for API key and webhook secret management
@@ -113,6 +119,11 @@ async function initializeApp(): Promise<void> {
         backupService.start();
       }
 
+      if (config.reporting?.enabled) {
+        regulatoryReportScheduler = new RegulatoryReportScheduler(db, logger, config.reporting);
+        regulatoryReportScheduler.start();
+      }
+
       logger.info('PostgreSQL database connected');
     } catch (err) {
       logger.warn('Failed to connect to PostgreSQL, falling back to file-based storage', err);
@@ -123,7 +134,7 @@ async function initializeApp(): Promise<void> {
   }
 }
 
-const cache = new HybridCache<any>(logger, {
+const cache = new HybridCache<unknown>(logger, {
   redisUrl: config.redisUrl,
   fallbackToLru: true,
   priceTtl: config.priceCacheTtl,
@@ -184,12 +195,17 @@ app.use('/api/v2/sources', optionalAuthMiddleware);
 app.use('/api/v2/health', optionalAuthMiddleware);
 
 // Routes — v1 tagged as deprecated, v2 is current
+app.use('/api/v1/webhooks', authMiddleware, webhooksRoutes);
+app.use('/api/v1/releases', releaseNotesRoutes);
+app.use('/api/v1/keys', selfServiceRoutes);
 app.use('/api/v1', v1DeprecationHeaders, v1Routes);
 app.use('/api/v1', v1DeprecationHeaders, platformRoutes);
 app.use('/api/v1/sandbox', sandboxRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/governance', governanceRoutes);
 app.use('/api/v2', v2Headers, v2Routes);
+app.use('/graphql', graphqlRoutes);
+app.use('/api/graphql', graphqlRoutes);
 
 // Feature flags — #117
 app.use('/api/feature-flags', featureFlagRoutes);
@@ -213,6 +229,10 @@ app.use(errorHandler);
 
 async function startServer(): Promise<void> {
   await initializeApp();
+
+  const startupDurationMs = Date.now() - startupStartedAt;
+  serviceStartupDurationMs.set({ service: 'api' }, startupDurationMs);
+  logger.info(`API startup complete in ${startupDurationMs}ms`);
 
   const server = app.listen(config.port, () => {
     logger.info(`REST API listening on port ${config.port}`);
@@ -239,6 +259,7 @@ async function startServer(): Promise<void> {
     if (dbHealthMonitor) dbHealthMonitor.stop();
     if (consistencyChecker) consistencyChecker.stop();
     if (backupService) backupService.stop();
+    if (regulatoryReportScheduler) regulatoryReportScheduler.stop();
     if (db) {
       db.disconnect().catch((err) => logger.error('Error disconnecting from database', err));
     }
@@ -279,7 +300,7 @@ function startSyntheticProbes(port: number): void {
     // WebSocket reachability (TCP connect check via health endpoint)
     try {
       const res = await fetch(`http://localhost:${port}/api/v1/health`);
-      const body = await res.json() as any;
+      const body = await res.json() as { data?: { status?: unknown } };
       const wsStatus = body?.data?.status === 'healthy' ? true : body?.data?.status !== 'unhealthy';
       uptimeTracker.recordCheck('WebSocket', wsStatus);
     } catch {
