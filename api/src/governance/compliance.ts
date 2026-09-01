@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { Router, Request, Response, NextFunction } from 'express';
 import { listLineage } from '../platform/lineage';
+import { getIncidentDisclosurePolicy } from '../platform/self-healing';
 
 type AuditResult = 'success' | 'failure' | 'denied';
 
@@ -277,6 +278,10 @@ router.get('/data/subject/:id/export', (req: Request, res: Response) => {
 
 router.get('/compliance/key-custody', (_req: Request, res: Response) => {
   res.json({ success: true, data: { policy: keyCustodyPolicy } });
+});
+
+router.get('/compliance/incident-disclosure-policy', (_req: Request, res: Response) => {
+  res.json({ success: true, data: { policy: getIncidentDisclosurePolicy() } });
 });
 
 router.get('/compliance/reports/:framework', (req: Request, res: Response) => {
