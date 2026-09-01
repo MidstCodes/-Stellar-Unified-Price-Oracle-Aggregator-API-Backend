@@ -52,6 +52,34 @@ const retentionPolicies: RetentionPolicy[] = [
   { dataType: 'raw_source_payloads', retentionDays: 90, action: 'archive', store: 'raw_source_payloads' },
 ];
 
+export const keyCustodyPolicy = {
+  policy: 'custody follows a dual-control governance flow with role-specific keys and a timelocked quorum change',
+  quorum: {
+    approvalThreshold: 2,
+    votingWindowHours: 72,
+    timelockSeconds: 24 * 60 * 60,
+    emergencyTimelockSeconds: 0,
+  },
+  keyHolders: [
+    {
+      role: 'Mainnet admin',
+      custody: 'HSM/KMS-backed signer with an isolated admin policy',
+      authority: 'admin-gated config, source management, and emergency signer rotation',
+    },
+    {
+      role: 'Governance signer',
+      custody: 'Independent KMS/HSM key per signer; no shared hardware',
+      authority: 'approval and execution of quorum changes and governance proposals',
+    },
+    {
+      role: 'Oracle-source signer',
+      custody: 'Source-scoped keys with no admin rights',
+      authority: 'price submission for a single upstream source',
+    },
+  ],
+  changeFlow: ['propose', 'review', 'approve', 'timelock', 'execute', 'record'],
+};
+
 export function getDataSubjectRequests(subjectId: string): DataSubjectRequest[] {
   return dataSubjectRequests.get(subjectId) || [];
 }
@@ -245,6 +273,10 @@ router.get('/data/subject/:id/export', (req: Request, res: Response) => {
       retentionPlan: retentionPolicies,
     },
   });
+});
+
+router.get('/compliance/key-custody', (_req: Request, res: Response) => {
+  res.json({ success: true, data: { policy: keyCustodyPolicy } });
 });
 
 router.get('/compliance/reports/:framework', (req: Request, res: Response) => {
