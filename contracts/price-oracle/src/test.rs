@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests_impl {
+    use soroban_sdk::{Address, Env, String};
     use soroban_sdk::testutils::Address as TestAddress;
     use soroban_sdk::{Address, Env, String, Vec};
 

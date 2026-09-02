@@ -217,50 +217,12 @@ fn fuzz_sequential_price_submissions_consistency() {
     let (env, client, _admin, oracle) = setup_fuzz();
     let asset = String::from_str(&env, "XLM");
 
-    client.submit_price(
-        &oracle,
-        &asset,
-        &100_000i128,
-        &7u32,
-        &(env.ledger().timestamp()),
-    );
-    client.submit_price(
-        &oracle,
-        &asset,
-        &1_000_000i128,
-        &7u32,
-        &(env.ledger().timestamp() + 1),
-    );
-    client.submit_price(
-        &oracle,
-        &asset,
-        &10_000_000i128,
-        &7u32,
-        &(env.ledger().timestamp() + 2),
-    );
-    client.submit_price(
-        &oracle,
-        &asset,
-        &(i128::MAX / 2),
-        &7u32,
-        &(env.ledger().timestamp() + 3),
-    );
-    // submit_price rejects negative prices (InvalidPrice); a positive value
-    // keeps the history-consistency intent of the test.
-    client.submit_price(
-        &oracle,
-        &asset,
-        &500_000i128,
-        &7u32,
-        &(env.ledger().timestamp() + 4),
-    );
-    client.submit_price(
-        &oracle,
-        &asset,
-        &0i128,
-        &7u32,
-        &(env.ledger().timestamp() + 5),
-    );
+    client.submit_price(&oracle, &asset, &100_000i128, &7u32, &(env.ledger().timestamp()));
+    client.submit_price(&oracle, &asset, &1_000_000i128, &7u32, &(env.ledger().timestamp() + 1));
+    client.submit_price(&oracle, &asset, &10_000_000i128, &7u32, &(env.ledger().timestamp() + 2));
+    client.submit_price(&oracle, &asset, &(i128::MAX / 2), &7u32, &(env.ledger().timestamp() + 3));
+    client.submit_price(&oracle, &asset, &500_000i128, &7u32, &(env.ledger().timestamp() + 4));
+    client.submit_price(&oracle, &asset, &0i128, &7u32, &(env.ledger().timestamp() + 5));
 
     let history = client.get_price_history(&asset, &u32::MAX);
     assert_eq!(history.len(), 6);
