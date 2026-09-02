@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 // Test modules use `std` (e.g. `println!`/`vec!` in gas benchmarks); the
 // production WASM build stays `no_std`.
@@ -13,6 +13,7 @@ mod multisig;
 mod proxy;
 pub mod storage;
 mod types;
+mod utils;
 
 #[cfg(test)]
 mod compat_test;
@@ -22,6 +23,8 @@ mod fuzz;
 mod gas_benchmarks;
 #[cfg(test)]
 mod governance_test;
+#[cfg(test)]
+mod merkle_test;
 #[cfg(test)]
 mod proxy_test;
 #[cfg(test)]

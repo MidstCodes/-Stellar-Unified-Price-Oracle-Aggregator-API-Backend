@@ -42,4 +42,6 @@ pub enum OracleError {
     InvalidPrice = 32,
     // Issue #379 — multi-region aware emergency pause
     ContractPaused = 33,
+    // Issue #385 — Merkle batch replay resistance
+    BatchEntryAlreadyApplied = 34,
 }
