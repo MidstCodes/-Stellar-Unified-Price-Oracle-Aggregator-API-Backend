@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { uptimeTracker } from './uptime-tracker';
+import type { Component, Incident } from './uptime-tracker';
 
 const router = Router();
 
@@ -43,7 +44,7 @@ function renderHtml(
   const color = STATUS_COLOR[overall] ?? '#95a5a6';
   const label = STATUS_LABEL[overall] ?? overall;
 
-  const componentRows = components.map((c: any) => {
+  const componentRows = components.map((c: Component) => {
     const dot = STATUS_COLOR[c.status] ?? '#95a5a6';
     const updated = c.lastCheckedAt
       ? new Date(c.lastCheckedAt * 1000).toISOString()
@@ -59,7 +60,7 @@ function renderHtml(
 
   const incidentItems = incidents.length === 0
     ? '<p style="color:#666;font-style:italic">No incidents in the last 30 days.</p>'
-    : incidents.map((inc: any) => {
+    : incidents.map((inc: Incident) => {
       const started = new Date(inc.startedAt * 1000).toISOString();
       const resolved = inc.resolvedAt ? new Date(inc.resolvedAt * 1000).toISOString() : null;
       const badge = inc.resolvedAt
@@ -74,7 +75,7 @@ function renderHtml(
           <div style="font-size:0.85em;color:#666">
             Component: ${esc(inc.component)} &bull; Started: ${started}${resolved ? ` &bull; Resolved: ${resolved}` : ''}
           </div>
-          ${inc.updates.map((u: any) => `<div style="margin-top:8px;font-size:0.9em;color:#444;padding-left:8px;border-left:3px solid #ddd">${new Date(u.timestamp * 1000).toISOString()} — ${esc(u.message)}</div>`).join('')}
+          ${inc.updates.map((u) => `<div style="margin-top:8px;font-size:0.9em;color:#444;padding-left:8px;border-left:3px solid #ddd">${new Date(u.timestamp * 1000).toISOString()} — ${esc(u.message)}</div>`).join('')}
         </div>`;
     }).join('');
 

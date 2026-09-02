@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Bytes, String, Vec};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, String, Vec};
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -115,30 +115,21 @@ pub enum ProposalAction {
     Unpause,
 }
 
-// ── Governance types ─────────────────────────────────────────────────────────
+// ── Multi-sig types ──────────────────────────────────────────────────────────
 
 #[contracttype]
 #[derive(Clone, Debug)]
-pub struct GovernanceConfig {
-    pub token: Address,
-    pub proposal_threshold: i128,
-    pub voting_period: u64,
-    pub timelock_delay: u64,
-    pub quorum: i128,
-    pub guardian: Address,
+pub struct MultiSigProposal {
+    pub id: u32,
+    pub action: ProposalAction,
+    pub approvals: Vec<Address>,
+    pub executed: u32, // 0 = pending, 1 = executed (bool avoided for XDR compat)
+    pub created_at: u64,
+    pub proposer: Address,
 }
 
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ProposalStatus {
-    Active,
-    Queued,
-    Ready,
-    Executed,
-    Defeated,
-    Cancelled,
-}
-
+/// Governance proposal (token-based voting).  Distinct from MultiSigProposal
+/// because the lifecycle includes voting stages, timelock, descriptions, etc.
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct GovernanceProposal {
@@ -154,17 +145,50 @@ pub struct GovernanceProposal {
     pub status: ProposalStatus,
 }
 
-// ── Multi-sig types ──────────────────────────────────────────────────────────
+/// Lifecycle status of a governance proposal.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProposalStatus {
+    Active,
+    Queued,
+    Ready,
+    Executed,
+    Defeated,
+    Cancelled,
+}
+
+/// On-chain governance configuration — voting parameters and token-gating.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct GovernanceConfig {
+    /// SEP-41 token whose balance determines voting power.
+    pub token: Address,
+    /// Minimum voting period in ledger seconds.
+    pub voting_period: u64,
+    /// Minimum delay between passage and execution (timelock).
+    pub timelock_delay: u64,
+    /// Minimum total votes (for + against) needed for a proposal to pass.
+    pub quorum: i128,
+    /// Minimum token balance required to create a proposal.
+    pub proposal_threshold: i128,
+    /// Guardian address empowered to bypass timelock in emergencies.
+    pub guardian: Address,
+}
+
+// Issue #375 — timelocked, quorum-gated proxy upgrades + canary rollout
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct PendingProxyUpgrade {
+    pub new_wasm_hash: BytesN<32>,
+    pub unlock_time: u64,
+    pub approvals: Vec<Address>,
+}
 
 #[contracttype]
 #[derive(Clone, Debug)]
-pub struct MultiSigProposal {
-    pub id: u32,
-    pub action: ProposalAction,
-    pub approvals: Vec<Address>,
-    pub executed: u32, // 0 = pending, 1 = executed (bool avoided for XDR compat)
-    pub created_at: u64,
-    pub proposer: Address,
+pub struct CanaryConfig {
+    pub candidate: Address,
+    pub share_bps: u32,
 }
 
 #[contracttype]
@@ -190,6 +214,8 @@ pub enum DataKey {
     SourceReputation(Address),
     BatchNonce,
     BatchRoot(u64),
+    BatchAppliedLeaves(u64),
+    BatchPruneWatermark,
     QueryFee,
     Whitelist(Address),
     FeeBalance,
@@ -199,9 +225,10 @@ pub enum DataKey {
     SlashCount(Address),
     // Issue #67 — multi-sig
     MultiSigConfig,
-    ProposalCount,
     MultiSigProposalCount,
     MultiSigProposal(u32),
+    // Issue #379 — multi-region aware emergency pause
+    Paused,
     // Governance
     GovernanceConfig,
     GovernanceProposalCount,

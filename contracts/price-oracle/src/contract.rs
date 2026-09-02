@@ -3,19 +3,8 @@ use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, String, Vec};
 use crate::errors::OracleError;
 use crate::merkle;
 use crate::storage;
-use crate::types::{
-    AssetPrice, BatchPriceEntry, MerkleProof, MultiSigConfig, MultiSigProposal, PriceDataPoint,
-    ProposalAction, SourceReputation,
-};
-
-// Basis points threshold below which a submission is counted as accurate for reputation.
-const REPUTATION_ACCURACY_THRESHOLD_BPS: u128 = 2000; // 20%
-
-// Seconds between reputation decay applications (~7 days).
-const REPUTATION_DECAY_PERIOD_SECS: u64 = 604_800;
-// Decay factor per period: score = score * 95 / 100.
-const REPUTATION_DECAY_NUMERATOR: u32 = 95;
-const REPUTATION_DECAY_DENOMINATOR: u32 = 100;
+use crate::types::{AssetPrice, BatchPriceEntry, MerkleProof, MultiSigConfig, MultiSigProposal, ProposalAction, PriceDataPoint, SourceReputation};
+use crate::utils::{append_history, apply_reputation_decay, calculate_usd_price, deviation_exceeds, update_reputation, vec_contains_address};
 
 // Issue #383 — ABI version of the exported interface.  Bump only for a
 // breaking change to any exported entrypoint's shape (see
@@ -170,6 +159,11 @@ impl PriceOracleContract {
             return Err(OracleError::InvalidMerkleProof);
         }
 
+        // Issue #385 — each (batch, leaf) pair can be applied exactly once; a
+        // repeated apply of an already-applied leaf fails with
+        // BatchEntryAlreadyApplied instead of writing a duplicate history entry.
+        storage::mark_batch_leaf_applied(&env, batch_nonce, proof.leaf_index)?;
+
         let data_point = PriceDataPoint {
             asset: entry.asset.clone(),
             price: entry.price,
@@ -187,6 +181,23 @@ impl PriceOracleContract {
         );
 
         Ok(data_point)
+    }
+
+    pub fn get_batch_nonce(env: Env) -> u64 {
+        storage::get_batch_nonce(&env)
+    }
+
+    /// Read-only inclusion check used by off-chain tooling and tests.
+    pub fn verify_batch_proof(
+        env: Env,
+        batch_nonce: u64,
+        entry: BatchPriceEntry,
+        proof: MerkleProof,
+    ) -> bool {
+        let Some(root) = storage::get_batch_root(&env, batch_nonce) else {
+            return false;
+        };
+        merkle::verify_proof(&env, &entry, proof.leaf_index, &proof.siblings, &root)
     }
 
     // -------------------------------------------------------------------------
@@ -411,6 +422,21 @@ impl PriceOracleContract {
         result
     }
 
+    // -------------------------------------------------------------------------
+    // Issue #376 — TTL / rent extension. Permissionless: bumping TTL is never
+    // harmful, and gating it behind auth would only make the scheduled job
+    // more brittle. Intended to be called periodically (see docs/RENT_AND_TTL.md)
+    // for every tracked asset plus once for the contract instance.
+    // -------------------------------------------------------------------------
+
+    pub fn extend_price_history_ttl(env: Env, asset: String, threshold: u32, extend_to: u32) {
+        storage::extend_price_history_ttl(&env, &asset, threshold, extend_to);
+    }
+
+    pub fn extend_instance_ttl(env: Env, threshold: u32, extend_to: u32) {
+        storage::extend_instance_ttl(&env, threshold, extend_to);
+    }
+
     // ── Admin functions ───────────────────────────────────────────────────────
 
     pub fn add_oracle_source(
@@ -520,107 +546,6 @@ impl PriceOracleContract {
     }
 }
 
-// -------------------------------------------------------------------------
-// History helper
-// Appends a data point to an asset's price history, capping it at
-// storage::MAX_HISTORY_LEN to keep the persistent-storage entry size bounded.
-// -------------------------------------------------------------------------
-fn append_history(env: &Env, asset: &String, data_point: PriceDataPoint) {
-    let mut history = storage::get_price_history(env, asset);
-    if history.len() >= storage::MAX_HISTORY_LEN {
-        // Drop the oldest entry (index 0) by rebuilding from index 1.
-        // Soroban Vec has no remove(), so we shift manually.
-        let mut trimmed: Vec<PriceDataPoint> = Vec::new(env);
-        for i in 1..history.len() {
-            if let Some(dp) = history.get(i) {
-                trimmed.push_back(dp);
-            }
-        }
-        trimmed.push_back(data_point);
-        storage::set_price_history(env, asset, &trimmed);
-    } else {
-        history.push_back(data_point);
-        storage::set_price_history(env, asset, &history);
-    }
-}
-
-// -------------------------------------------------------------------------
-// Issue #69 — deviation helper
-// Returns true when the new price deviates from prev_price by more than threshold_bps.
-// Uses u128 arithmetic throughout to avoid i128 overflow under any input.
-// -------------------------------------------------------------------------
-fn deviation_exceeds(new_price: i128, prev_price: i128, threshold_bps: u32) -> bool {
-    if prev_price == 0 {
-        return false;
-    }
-    let prev_abs = prev_price.unsigned_abs();
-
-    let diff: u128 = if (new_price >= 0) == (prev_price >= 0) {
-        let new_abs = new_price.unsigned_abs();
-        if new_abs >= prev_abs {
-            new_abs - prev_abs
-        } else {
-            prev_abs - new_abs
-        }
-    } else {
-        new_price.unsigned_abs().saturating_add(prev_abs)
-    };
-
-    let deviation_bps = diff.saturating_mul(10_000) / prev_abs;
-    deviation_bps > threshold_bps as u128
-}
-
-// -------------------------------------------------------------------------
-// Issue #70 — reputation helpers
-// -------------------------------------------------------------------------
-fn update_reputation(env: &Env, source: &Address, new_price: i128, asset: &String, timestamp: u64) {
-    let is_accurate = match storage::get_latest_price(env, asset) {
-        None => true,
-        Some(prev) => !deviation_exceeds(
-            new_price,
-            prev.price,
-            REPUTATION_ACCURACY_THRESHOLD_BPS as u32,
-        ),
-    };
-
-    let mut rep = storage::get_source_reputation(env, source).unwrap_or(SourceReputation {
-        score: 10_000,
-        total_submissions: 0,
-        accurate_submissions: 0,
-        last_updated: timestamp,
-    });
-
-    rep.total_submissions = rep.total_submissions.saturating_add(1);
-    if is_accurate {
-        rep.accurate_submissions = rep.accurate_submissions.saturating_add(1);
-    }
-    rep.score = if rep.total_submissions == 0 {
-        10_000
-    } else {
-        (rep.accurate_submissions as u32).saturating_mul(10_000) / rep.total_submissions
-    };
-    rep.last_updated = timestamp;
-
-    storage::set_source_reputation(env, source, &rep);
-}
-
-fn apply_reputation_decay(env: &Env, mut rep: SourceReputation) -> SourceReputation {
-    let now = env.ledger().timestamp();
-    let elapsed = now.saturating_sub(rep.last_updated);
-    if elapsed < REPUTATION_DECAY_PERIOD_SECS {
-        return rep;
-    }
-    let periods = (elapsed / REPUTATION_DECAY_PERIOD_SECS).min(40) as u32;
-    for _ in 0..periods {
-        rep.score =
-            rep.score.saturating_mul(REPUTATION_DECAY_NUMERATOR) / REPUTATION_DECAY_DENOMINATOR;
-    }
-    rep
-}
-
-// -------------------------------------------------------------------------
-// Issue #67 — proposal action executor
-// -------------------------------------------------------------------------
 fn apply_proposal_action(env: &Env, action: &ProposalAction) -> Result<(), OracleError> {
     match action {
         ProposalAction::AddSource(source, name) => {
@@ -696,9 +621,8 @@ fn calculate_usd_price(env: &Env, asset: &String, price: i128, decimals: u32) ->
     if asset == &xlm {
         return Some(price);
     }
-
     let usdc = String::from_str(env, "USDC");
-    if let Some(usdc_anchor) = storage::get_latest_price(env, &usdc) {
+    if let Some(_usdc_anchor) = storage::get_latest_price(env, &usdc) {
         if asset == &usdc {
             return Some(10i128.pow(decimals));
         }
@@ -712,6 +636,7 @@ fn calculate_usd_price(env: &Env, asset: &String, price: i128, decimals: u32) ->
     // (price_in_xlm * xlm_usd_price) / 10^xlm_price.decimals -- uses
     // xlm_price's own decimals, not usdc_anchor's, since
     // xlm_price.price is scaled by xlm_price.decimals.
-    let usd_value = (price * xlm_price.price).checked_div(10i128.pow(xlm_price.decimals))?;
+    let usd_value = (price * xlm_price.price)
+        .checked_div(10i128.pow(xlm_price.decimals))?;
     Some(usd_value)
 }
