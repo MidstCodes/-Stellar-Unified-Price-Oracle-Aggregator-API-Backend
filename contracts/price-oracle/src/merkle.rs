@@ -17,15 +17,14 @@ use soroban_sdk::{Bytes, Env, String};
 
 use crate::types::BatchPriceEntry;
 
-/// Copies a host `String`'s full UTF-8 payload into `Bytes`.
-///
-/// Asset symbols and strkey source addresses are short (well under 64
-/// bytes), so a stack buffer suffices; the exact byte length is always
-/// copied, keeping leaf hashing deterministic and identical to the
-/// off-chain TypeScript builder.
+// Soroban's `String` has no direct byte accessor; `copy_into_slice` requires an
+// exact-length buffer.  Asset symbols and strkey-encoded addresses are always
+// well under this cap in practice.
+const MAX_STRING_LEN: usize = 64;
+
 fn string_to_bytes(env: &Env, s: &String) -> Bytes {
     let len = s.len() as usize;
-    let mut buf = [0u8; 64];
+    let mut buf = [0u8; MAX_STRING_LEN];
     s.copy_into_slice(&mut buf[..len]);
     Bytes::from_slice(env, &buf[..len])
 }
@@ -59,7 +58,7 @@ pub fn hash_leaf(env: &Env, entry: &BatchPriceEntry) -> Bytes {
     // timestamp: u64 as 8-byte big-endian
     let ts_bytes = entry.timestamp.to_be_bytes();
     buf.append(&Bytes::from_array(env, &ts_bytes));
-    // Source address strkey bytes
+    // source address bytes (32 bytes for Stellar public key)
     buf.append(&string_to_bytes(env, &entry.source.to_string()));
 
     env.crypto().sha256(&buf).into()
@@ -92,6 +91,10 @@ pub fn verify_proof(
     siblings: &soroban_sdk::Vec<Bytes>,
     root: &Bytes,
 ) -> bool {
+    if siblings.len() > MAX_PROOF_SIBLINGS {
+        return false;
+    }
+
     let mut current = hash_leaf(env, entry);
     let mut index = leaf_index;
 

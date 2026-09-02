@@ -3,6 +3,13 @@ import client from 'prom-client';
 const register = new client.Registry();
 client.collectDefaultMetrics({ register });
 
+export const serviceStartupDurationMs = new client.Gauge({
+  name: 'service_startup_duration_ms',
+  help: 'Time from process start until service warm-up finishes and the ready endpoint can pass',
+  labelNames: ['service'],
+  registers: [register],
+});
+
 // #63 — WebSocket connection monitoring
 export const wsConnectionsActive = new client.Gauge({
   name: 'ws_connections_active',
@@ -107,35 +114,26 @@ export const onChainHeartbeatAlertsTotal = new client.Counter({
   registers: [register],
 });
 
-// Issue #105 — canary deployments for contract upgrades.
-export const canarySubmissionsTotal = new client.Counter({
-  name: 'canary_submissions_total',
-  help: 'Price submissions routed to the canary implementation',
-  labelNames: ['status'], // 'success' | 'failed'
+export const contractSubmissionGas = new client.Histogram({
+  name: 'contract_submission_gas',
+  help: 'Gas used by Soroban contract submissions in stroops',
+  labelNames: ['function', 'asset', 'status'],
+  buckets: [1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000, 10000000],
   registers: [register],
 });
 
-export const canaryActive = new client.Gauge({
-  name: 'canary_active',
-  help: '1 while a canary implementation is registered with a non-zero traffic share, 0 otherwise',
+export const contractSubmissionGasTotal = new client.Counter({
+  name: 'contract_submission_gas_total',
+  help: 'Total gas used by Soroban contract submissions',
+  labelNames: ['function', 'asset', 'status'],
   registers: [register],
 });
 
-export const canaryTrafficShareBps = new client.Gauge({
-  name: 'canary_traffic_share_bps',
-  help: 'Traffic share currently routed to the canary implementation, in basis points',
-  registers: [register],
-});
-
-export const canaryConsecutiveFailures = new client.Gauge({
-  name: 'canary_consecutive_failures',
-  help: 'Consecutive canary submission failures observed by the rollback guard',
-  registers: [register],
-});
-
-export const canaryRollbacksTotal = new client.Counter({
-  name: 'canary_rollbacks_total',
-  help: 'Number of times the auto-rollback zeroed the canary traffic share',
+export const pipelineStageLatencyMs = new client.Histogram({
+  name: 'pipeline_stage_latency_ms',
+  help: 'Latency budget for each stage of the price pipeline in milliseconds',
+  labelNames: ['stage', 'status'],
+  buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000],
   registers: [register],
 });
 
