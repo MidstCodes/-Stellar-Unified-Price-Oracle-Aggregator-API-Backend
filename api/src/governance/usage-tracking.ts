@@ -24,7 +24,7 @@ export function usageTrackingMiddleware(req: Request, res: Response, next: NextF
     const record: UsageRecord = {
       endpoint: req.route ? req.baseUrl + req.route.path : req.path,
       method: req.method,
-      apiKeyPrefix:
+      apiKeyPrefix,
       asset: asset ? asset.toUpperCase() : undefined,
       status: res.statusCode,
       timestamp: Date.now(),
