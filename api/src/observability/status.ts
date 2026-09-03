@@ -20,10 +20,11 @@ router.get('/', (req: Request, res: Response) => {
   const components = uptimeTracker.getComponents();
   const incidents = uptimeTracker.getIncidents(20);
   const overall = uptimeTracker.overallStatus();
+  const disclosure = getIncidentDisclosurePolicy();
 
   if (req.accepts('html')) {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(renderHtml(overall, components, incidents));
+    res.send(renderHtml(overall, components, incidents, disclosure));
     return;
   }
 
@@ -32,6 +33,7 @@ router.get('/', (req: Request, res: Response) => {
     statusLabel: STATUS_LABEL[overall],
     components,
     incidents,
+    disclosure,
     generatedAt: Math.floor(Date.now() / 1000),
   });
 });
@@ -40,6 +42,7 @@ function renderHtml(
   overall: string,
   components: ReturnType<typeof uptimeTracker.getComponents>,
   incidents: ReturnType<typeof uptimeTracker.getIncidents>,
+  disclosure: ReturnType<typeof getIncidentDisclosurePolicy>,
 ): string {
   const color = STATUS_COLOR[overall] ?? '#95a5a6';
   const label = STATUS_LABEL[overall] ?? overall;
@@ -100,6 +103,7 @@ function renderHtml(
     td{padding:10px 0;border-bottom:1px solid #f0f0f0;vertical-align:middle}
     tr:last-child td{border:none}
     footer{text-align:center;font-size:0.8em;color:#aaa;margin:32px 0;padding-bottom:32px}
+    .policy{font-size:0.95em;line-height:1.6;color:#444}
   </style>
 </head>
 <body>
@@ -115,6 +119,14 @@ function renderHtml(
         <thead><tr><th>Component</th><th>Status</th><th>Uptime (24 h)</th><th>Last checked</th></tr></thead>
         <tbody>${componentRows}</tbody>
       </table>`}
+    </div>
+    <div class="card">
+      <h2>Incident Disclosure Policy</h2>
+      <div class="policy">
+        <p>${esc(disclosure.summary)}</p>
+        <p><strong>Notification path:</strong> ${esc(disclosure.consumerNotificationPath)}</p>
+        <p><strong>Timelines:</strong> ${Object.entries(disclosure.timeliness).map(([level, value]) => `${esc(level)}: ${esc(String(value))}`).join(' · ')}</p>
+      </div>
     </div>
     <div class="card">
       <h2>Incident History</h2>
