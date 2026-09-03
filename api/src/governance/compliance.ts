@@ -73,7 +73,7 @@ const reportSchedules: RecurringReport[] = [
 const pendingReports: PendingReport[] = [];
 
 function timestampNs(): string {
-  return (BigInt(Date.now()) * 1_000_000n .toString();
+  return (BigInt(Date.now()) * 1_000_000n).toString();
 }
 
 function hashEntry(entry: Omit<ComplianceAuditEntry, 'hash'>): string {
@@ -122,8 +122,7 @@ export function complianceAuditMiddleware(req: Request, res: Response, next: Nex
     recordComplianceAudit(
       res.statusCode >= 400 ? 'error.http' : 'data.access',
       req,
-      `
-${"req.method} ${req.path}`,
+      `\n${req.method} ${req.path}`,
       res.statusCode >= 400 ? 'failure' : 'success',
       { statusCode: res.statusCode },
     );
