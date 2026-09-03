@@ -1,16 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { logger } from '../observability/logger';
 import { config } from '../infrastructure/config';
 import { encrypt, decrypt, isEncrypted, isEncryptionConfigured } from '../infrastructure/crypto';
-import { Result, err, ok } from '../infrastructure/result';
-
-export interface HistoricalPriceEntry {
-  price: string;
-  decimals: number;
-  source: string;
-  timestamp: number;
-}
 
 export interface HistoricalPriceEntry {
   price: string;
@@ -95,8 +86,4 @@ export function getHistoricalPrices(
   } catch {
     return [];
   }
-  let history = read.value;
-  if (from) history = history.filter((h) => h.timestamp >= from);
-  if (to) history = history.filter((h) => h.timestamp <= to);
-  return history.slice(-limit);
 }
