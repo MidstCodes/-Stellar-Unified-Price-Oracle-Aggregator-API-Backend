@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Router, Request, Response, NextFunction } from 'express';
+import { listLineage } from '../platform/lineage';
+import { getIncidentDisclosurePolicy } from '../platform/self-healing';
 
 type AuditResult = 'success' | 'failure' | 'denied';
 
@@ -23,6 +25,19 @@ interface RetentionPolicy {
   dataType: string;
   retentionDays: number;
   action: 'delete' | 'archive';
+  store: string;
+}
+
+interface DataSubjectRequest {
+  id: string;
+  subjectId: string;
+  requestType: 'access' | 'erasure' | 'explanation';
+  status: 'received' | 'processing' | 'fulfilled' | 'rejected';
+  createdAt: string;
+  fulfilledAt?: string;
+  stores: string[];
+  notes?: string[];
+  result?: Record<string, unknown>;
 }
 
 const router = Router();
@@ -30,11 +45,64 @@ const auditEntries: ComplianceAuditEntry[] = [];
 const auditLogPath = path.resolve(process.cwd(), 'logs/compliance-audit.jsonl');let previousHash = '0'.repeat(64);
 
 const retentionPolicies: RetentionPolicy[] = [
-  { dataType: 'price_data', retentionDays: 2555, action: 'archive' },
-  { dataType: 'audit_logs', retentionDays: 1095, action: 'archive' },
-  { dataType: 'debug_logs', retentionDays: 90, action: 'delete' },
-  { dataType: 'raw_source_payloads', retentionDays: 90, action: 'archive' },
+  { dataType: 'price_data', retentionDays: 2555, action: 'archive', store: 'price_history' },
+  { dataType: 'audit_logs', retentionDays: 1095, action: 'archive', store: 'compliance_audit_log' },
+  { dataType: 'debug_logs', retentionDays: 90, action: 'delete', store: 'debug_logs' },
+  { dataType: 'raw_source_payloads', retentionDays: 90, action: 'archive', store: 'raw_source_payloads' },
 ];
+
+export const keyCustodyPolicy = {
+  policy: 'custody follows a dual-control governance flow with role-specific keys and a timelocked quorum change',
+  quorum: {
+    approvalThreshold: 2,
+    votingWindowHours: 72,
+    timelockSeconds: 24 * 60 * 60,
+    emergencyTimelockSeconds: 0,
+  },
+  keyHolders: [
+    {
+      role: 'Mainnet admin',
+      custody: 'HSM/KMS-backed signer with an isolated admin policy',
+      authority: 'admin-gated config, source management, and emergency signer rotation',
+    },
+    {
+      role: 'Governance signer',
+      custody: 'Independent KMS/HSM key per signer; no shared hardware',
+      authority: 'approval and execution of quorum changes and governance proposals',
+    },
+    {
+      role: 'Oracle-source signer',
+      custody: 'Source-scoped keys with no admin rights',
+      authority: 'price submission for a single upstream source',
+    },
+  ],
+  changeFlow: ['propose', 'review', 'approve', 'timelock', 'execute', 'record'],
+};
+
+export function getDataSubjectRequests(subjectId: string): DataSubjectRequest[] {
+  return dataSubjectRequests.get(subjectId) || [];
+}
+
+function ensureRequestList(subjectId: string): DataSubjectRequest[] {
+  if (!dataSubjectRequests.has(subjectId)) {
+    dataSubjectRequests.set(subjectId, []);
+  }
+  return dataSubjectRequests.get(subjectId)!;
+}
+
+function createDataSubjectRequest(subjectId: string, requestType: DataSubjectRequest['requestType'], req: Request): DataSubjectRequest {
+  const request: DataSubjectRequest = {
+    id: crypto.randomUUID(),
+    subjectId,
+    requestType,
+    status: 'received',
+    createdAt: new Date().toISOString(),
+    stores: retentionPolicies.map((policy) => policy.store),
+    notes: [`Created via ${req.method} ${req.originalUrl || req.path}`],
+  };
+  ensureRequestList(subjectId).push(request);
+  return request;
+}
 
 const soc2Controls = [
   { id: 'CC6.1', name: 'Logical access', status: 'partial', evidence: ['api-key-manager', 'rbac'] },
